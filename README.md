@@ -1,96 +1,126 @@
-# Afara API
+# Afara Backend
 
-FastAPI backend for **Afara** — a Yorùbá ↔ English voice bridge + language
-tutor for Ekiti State. "Afara" means *bridge* in Yorùbá.
+Backend for Afara, a Yorùbá–English voice app for Ekiti State. You talk, it
+transcribes, translates, and can read the translation back to the other person.
+"Afara" is Yorùbá for "bridge".
 
-## Architecture (as of the frontend meeting)
+This repo is just the API. The mobile app (Expo/React Native) lives in a
+separate repo.
 
-Speech-to-text runs **on the phone** (on-device Whisper). So the backend does
-**not** transcribe. Its job is:
+## How the pieces fit
 
-1. **Translate** the text the phone sends (the hot path)
-2. **Speak** the translation aloud in Yorùbá (TTS)
-3. **Chat** — the AI language companion / tutor
-4. **Collect the corpus** — every audio clip + transcript + correction, which
-   becomes the first annotated Ekiti-Yorùbá dataset (the moat)
+We split the work between the phone and the server on purpose:
 
-Runs out of the box in **stub mode** (no API keys, canned responses) so you can
-wire up the frontend and deploy a live demo immediately, then flip
-`MODEL_PROVIDER` to `anthropic` / `openai` when keys land.
+- The **phone** handles listening (speech-to-text runs on-device with Whisper).
+  It's faster, works offline, and costs us nothing per request.
+- The **server** handles the parts the phone can't do well:
+  - translating the text
+  - speaking Yorùbá out loud (phones don't ship a Yorùbá voice)
+  - the AI tutor chat
+  - storing the recordings so we can build our own Ekiti dataset over time
 
-## Run locally (no Docker needed)
+That last point matters. There is no good speech model for the Ekiti dialect
+yet. Every time a user speaks and corrects the app, we keep that audio. Over
+time that becomes a dataset nobody else has, and it's the whole reason Afara
+can eventually beat the generic tools.
+
+## Running it
+
+You don't need Docker for local dev. Just Python and uvicorn.
 
 ```bash
 cd backend
-python -m venv .venv && . .venv/Scripts/activate   # Windows
+python -m venv .venv
+.venv\Scripts\activate        # Windows
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-Open http://localhost:8000/docs for interactive Swagger docs.
+It starts on http://localhost:8000. Go to http://localhost:8000/docs for the
+interactive API docs where you can click and test every endpoint.
 
-## Endpoints (prefix `/api/v1`)
+It runs with no API keys out of the box. In this mode the AI responses are fake
+placeholders so you can build and test the app end to end. When we're ready to
+plug in real models, it's one setting (see below), no code changes.
 
-| Method | Path               | Purpose                                                  |
-|--------|--------------------|----------------------------------------------------------|
-| GET    | `/health`          | Liveness + active model provider                         |
-| GET    | `/languages`       | Supported languages for the toggle                       |
-| POST   | `/translate`       | **Core.** Text → text (phone transcribes, posts text)    |
-| POST   | `/tts`             | Text → spoken audio (Yorùbá voice; see note below)       |
-| POST   | `/companion/chat`  | AI language tutor — the "chat" feature                   |
-| POST   | `/utterances`      | Upload a real exchange (audio + transcript) → the corpus |
+## The endpoints
 
-### `POST /translate`
+Everything is under `/api/v1`.
 
-```bash
-curl -X POST http://localhost:8000/api/v1/translate \
-  -H "Content-Type: application/json" \
-  -d '{"text":"Báwo ni","source_lang":"yoruba","target_lang":"english"}'
+**GET /health** — is the server up, and which model mode is it in. Used by the
+host (Render/Fly) to know the app is alive.
+
+**GET /languages** — the two languages for the toggle. Returns Yorùbá and
+English.
+
+**POST /translate** — the main one. The phone sends the transcribed text, this
+sends back the translation.
+```json
+{ "text": "Báwo ni", "source_lang": "yoruba", "target_lang": "english" }
 ```
 
-### `POST /companion/chat`
-
-```bash
-curl -X POST http://localhost:8000/api/v1/companion/chat \
-  -H "Content-Type: application/json" \
-  -d '{"messages":[{"role":"user","content":"Why is Báwo ni used here?"}]}'
+**POST /tts** — turn text into spoken audio. Use this for the Yorùbá side (the
+phone can already speak English for free). Returns audio bytes.
+```json
+{ "text": "Báwo ni", "language": "yoruba" }
 ```
 
-### `POST /utterances` (the moat)
-
-```bash
-curl -X POST http://localhost:8000/api/v1/utterances \
-  -F "audio=@clip.m4a" \
-  -F "transcript=Báwo ni" \
-  -F "translation=How are you" \
-  -F "direction=yoruba->english"
+**POST /companion/chat** — the tutor. The user asks things like "why is this
+phrase used?" or "is this formal?" and gets an answer. Send the conversation so
+far, get the next reply.
+```json
+{ "messages": [ { "role": "user", "content": "Why is Báwo ni used here?" } ] }
 ```
 
-## TTS: backend vs on-device
+**POST /utterances** — the data collector. After a real exchange, the app
+uploads the audio clip plus what was said and any correction the user made.
+This is what quietly builds the Ekiti dataset. Sent as a file upload, not JSON.
 
-Phones can speak **English** with the built-in system voice (free, offline).
-But **no phone ships a Yorùbá (yo-NG) system voice**, so the **Yorùbá** side
-must come from the backend (Google Cloud TTS `yo-NG` or Spitch AI). Recommended
-split: English TTS on-device, Yorùbá TTS via `/tts`.
+```
+audio (file), transcript, translation, direction, corrected_transcript,
+user_id, session_id
+```
 
-## Wiring a real model
+## Turning on the real AI
 
-All model calls live in `app/services.py`. To go live:
+All the model calls sit in one file: `app/services.py`. To go live, set these
+in a `.env` file (copy `.env.example`):
 
-```bash
-# .env
+```
 MODEL_PROVIDER=anthropic
-ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_API_KEY=your-key
 ```
 
-Uncomment the provider in `requirements.txt`. For Yorùbá STT/TTS wire Google
-Cloud or Spitch AI in the same file — no route changes needed.
+`MODEL_PROVIDER` can be `stub` (default, fake responses), `anthropic`, or
+`openai`. For Yorùbá speech (STT/TTS) we'll wire in Google Cloud or Spitch AI
+in the same file. None of the endpoints change when we do this.
 
-## Deploy
+## A note on Ekiti dialect
 
-- **Render:** connect the repo, root dir `backend`; `render.yaml` included.
-- **Fly.io:** `fly launch --no-deploy` then `fly deploy` (`Dockerfile` + `fly.toml`).
+We checked the research. There is no speech model built for Ekiti. Every Yorùbá
+model out there is trained on standard/Lagos Yorùbá, and even those get roughly
+1 in 4 words wrong. So expect the Yorùbá side to be rough at first. That's
+normal, and it's exactly why the `/utterances` collector exists.
 
-Set `CORS_ORIGINS` to your app's origin(s) before production. For a persistent
-corpus in production, point storage at Postgres + object storage (S3/R2) —
-see `app/storage.py`.
+## Deploying
+
+- **Render:** connect this repo, set the root directory to `backend`. The
+  `render.yaml` config is already here.
+- **Fly.io:** `fly launch --no-deploy`, then `fly deploy`. Uses the `Dockerfile`
+  and `fly.toml`.
+
+Before going to production, set `CORS_ORIGINS` to the app's real origin instead
+of `*`, and move the corpus storage from local disk to Postgres + S3/R2 (the
+swap point is `app/storage.py`).
+
+## Layout
+
+```
+app/
+  main.py       app setup, CORS, routes mounted at /api/v1
+  config.py     settings, read from environment / .env
+  routes.py     the endpoints
+  services.py   all AI calls (swap stub for real providers here)
+  storage.py    saves recordings for the dataset
+  schemas.py    request/response shapes
+```
