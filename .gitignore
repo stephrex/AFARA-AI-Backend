@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.env
+.venv/
+venv/
+.pytest_cache/
+# Local corpus data + captured audio — never commit user recordings
+data/
+*.log
+http_check*.py
+smoke_test.py
