@@ -1,0 +1,11 @@
+# Heavy deps for the local Yorùbá voice (TTS_PROVIDER=local).
+# Kept out of the base requirements so stub mode stays light and fast to install.
+#   pip install -r requirements-tts.txt
+#
+# Note: torch is large (~200MB). On a server, a CPU-only instance with ~1.5GB
+# RAM is enough for facebook/mms-tts-yor (36M params). The base image can't be
+# the free 512MB tier.
+torch==2.6.0
+transformers==4.48.2
+huggingface_hub>=0.24
+numpy

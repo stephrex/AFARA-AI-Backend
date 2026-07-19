@@ -115,16 +115,35 @@ async def companion_chat(messages: list[ChatMessage], settings: Settings) -> str
 
 # --------------------------------------------------------------------------- #
 # Text-to-speech (text -> audio) — lazy, only when the user taps play.
+# Returns (audio_bytes, media_type).
 # --------------------------------------------------------------------------- #
-async def synthesize_speech(text: str, language: str, settings: Settings) -> bytes:
-    if settings.model_provider == "openai":
+async def synthesize_speech(
+    text: str, language: str, settings: Settings
+) -> tuple[bytes, str]:
+    if settings.tts_provider == "local":
+        # Real Yorùbá voice via facebook/mms-tts-yor, running in this server.
+        # The model is loaded once and kept warm; synthesis is CPU-bound so we
+        # push it to a worker thread to keep the event loop free.
+        from starlette.concurrency import run_in_threadpool
+
+        from . import tts_local
+
+        audio = await run_in_threadpool(
+            tts_local.synthesize,
+            text,
+            settings.local_tts_model,
+            settings.tts_num_threads,
+        )
+        return audio, "audio/wav"
+
+    if settings.tts_provider == "openai":
         from openai import AsyncOpenAI
 
         client = AsyncOpenAI(api_key=settings.openai_api_key)
         resp = await client.audio.speech.create(
             model="tts-1", voice="alloy", input=text
         )
-        return resp.read()
+        return resp.read(), "audio/mpeg"
+
     # stub — tiny placeholder so clients get a 200 with audio bytes.
-    # Wire Google Cloud TTS (yo-NG) or Spitch AI here for real Yorùbá voice.
-    return b"RIFF\x00\x00\x00\x00WAVEfmt "
+    return b"RIFF\x00\x00\x00\x00WAVEfmt ", "audio/wav"

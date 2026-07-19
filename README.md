@@ -95,6 +95,33 @@ ANTHROPIC_API_KEY=your-key
 `openai`. For Yorùbá speech (STT/TTS) we'll wire in Google Cloud or Spitch AI
 in the same file. None of the endpoints change when we do this.
 
+## Real Yorùbá voice (local TTS)
+
+Phones can't speak Yorùbá, so we can run `facebook/mms-tts-yor` on the server
+itself. To turn it on:
+
+```
+pip install -r requirements-tts.txt      # torch + transformers (heavy, one time)
+# in .env:
+TTS_PROVIDER=local
+```
+
+Now `POST /tts` returns real Yorùbá speech (a WAV file). It's built to be fast:
+
+- the model loads **once** at startup and stays warm in memory — never per
+  request, never re-downloaded per request (same idea as sentence-transformers)
+- a warm-up pass runs at boot so the first real request is already quick
+- `torch.inference_mode()` + CPU-thread tuning
+- results are **cached by text** — a repeated phrase comes back instantly
+- synthesis runs in a worker thread so it never blocks the server
+
+The model is small (36M params); a CPU instance with ~1.5GB RAM runs it fine,
+but it won't fit a 512MB free tier. Code is in `app/tts_local.py`.
+
+Note: `mms-tts-yor` is non-commercial. Fine for demos; for a paid product point
+`TTS_PROVIDER` at a commercially-cleared voice (Google `yo-NG` / Spitch AI) —
+same endpoint, different branch in `app/services.py`.
+
 ## A note on Ekiti dialect
 
 We checked the research. There is no speech model built for Ekiti. Every Yorùbá

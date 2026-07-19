@@ -30,6 +30,15 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     chat_model: str = "claude-sonnet-5"
 
+    # Text-to-speech provider, independent of the text model above.
+    #   stub   — tiny placeholder bytes (default, no deps)
+    #   local  — run facebook/mms-tts-yor inside this server (needs torch)
+    #   openai — OpenAI TTS (English-only voices)
+    tts_provider: str = "stub"
+    local_tts_model: str = "facebook/mms-tts-yor"
+    # CPU threads for local TTS; 0 = let torch decide.
+    tts_num_threads: int = 0
+
     # Where the Ekiti corpus (audio + transcripts + corrections) is written.
     corpus_dir: str = "data/corpus"
 

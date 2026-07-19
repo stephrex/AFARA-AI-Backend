@@ -69,8 +69,10 @@ async def translate(body: TranslateRequest, settings: Settings = Depends(get_set
 async def tts(body: TTSRequest, settings: Settings = Depends(get_settings)):
     """Text -> spoken audio. Returns raw audio bytes."""
     _check_lang(body.language)
-    audio = await services.synthesize_speech(body.text, body.language, settings)
-    return Response(content=audio, media_type="audio/mpeg")
+    audio, media_type = await services.synthesize_speech(
+        body.text, body.language, settings
+    )
+    return Response(content=audio, media_type=media_type)
 
 
 # --------------------------------------------------------------------------- #

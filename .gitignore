@@ -7,5 +7,10 @@ venv/
 # Local corpus data + captured audio — never commit user recordings
 data/
 *.log
+*.wav
 http_check*.py
 smoke_test.py
+tts_bench.py
+download_model.py
+# Downloaded model weights — pulled at deploy time, not committed
+models/
