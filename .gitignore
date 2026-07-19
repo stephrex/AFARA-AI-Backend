@@ -14,3 +14,5 @@ tts_bench.py
 download_model.py
 # Downloaded model weights — pulled at deploy time, not committed
 models/
+range_download.py
+tts_bench.py
