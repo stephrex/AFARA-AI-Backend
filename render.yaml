@@ -5,12 +5,20 @@ services:
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/v1/health
     envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
       - key: ENVIRONMENT
         value: production
       - key: MODEL_PROVIDER
         value: stub
+      # Real Yorùbá voice needs torch (requirements-tts.txt) + more RAM than the
+      # free tier — keep stub on free, enable local TTS on a paid instance.
+      - key: TTS_PROVIDER
+        value: stub
       - key: CORS_ORIGINS
         value: "*"
-      # - key: OPENAI_API_KEY
+      # Add your keys in the Render dashboard (do NOT commit them):
+      # - key: ANTHROPIC_API_KEY
       #   sync: false
